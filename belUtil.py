@@ -5,25 +5,16 @@ Created on Sun Oct  5 11:10:59 2014
 @author: Dexter Pratt
 """
 import sys
-import networkx as nx
-
-# Convert NDEx property graph json to a trivial networkx network
-def ndexPropertyGraphNetworkToNetworkX(ndexPropertyGraphNetwork):
-        g = nx.MultiDiGraph()
-        for node in ndexPropertyGraphNetwork['nodes'].values():
-            g.add_node(node['id'])
-        for edge in ndexPropertyGraphNetwork['edges'].values():
-            g.add_edge(edge['subjectId'], edge['objectId'])
-        return g
 
 # This is specific to summarizing a BEL network. 
 # Need to generalize
 def stripBELPrefixes(input):
     st = input.lower()
+    inputLength = len(input)
     if st.startswith('bel:'):
-        return input[4:input.len()]
+        return input[4:inputLength]
     elif st.startswith('hgnc:'):
-         return input[5:input.len()]
+         return input[5:inputLength]
     else:
          return input
 
@@ -62,6 +53,18 @@ def getFunctionAbbreviation(input):
     else:
         return fl
 
+def hasProperty(ndexObject, property, value):
+    properties = ndexObject.get("properties")
+    pred = property.lower()
+    if properties:
+        for item in properties:
+            p = item.get("predicateString")
+            if p and p.lower() == pred:
+                v = item.get("value")
+                if v and v == value:
+                    return True
+    return False
+
 class BELNetwork:
     def __init__ (self):
         self.initializeBlankNdexNetwork()
@@ -96,10 +99,10 @@ class BELNetwork:
             self.nodeLabelMap[int(nodeId)] = self.getNodeLabel(node)
 
         for edge in self.getEdges().values():
-            for supportId in edge['supportIds']:
+            for supportId in edge.get('supportIds'):
                 support = self.getSupport(supportId)
                 if supportId in self.supportToEdgeMap:
-                    edgeList = self.supportToEdgeMap[supportId]
+                    edgeList = self.supportToEdgeMap.get(supportId)
                 else:
                     edgeList = []
                 edgeList.append(edge)
@@ -109,69 +112,85 @@ class BELNetwork:
             support = self.getSupport(supportId)
             citationId = support['citationId']
             if citationId in self.citationToSupportMap:
-                supportIdList = self.citationToSupportMap[citationId]
+                supportIdList = self.citationToSupportMap.get(citationId)
             else:
                 supportIdList = []
             supportIdList.append(supportId)
             self.citationToSupportMap[citationId] = supportIdList
+
+
+    def setName(self, name):
+        self.network["name"] = name
 
     #----------------------------------------------------------
     # Basic Element Access
     #----------------------------------------------------------
 
     def getEdges(self):
-         return self.network['edges']
+         return self.network.get('edges')
 
     def getEdge(self, edgeId):
-        return self.network["edges"][str(edgeId)]
+        return self.network.get("edges").get(str(edgeId))
 
     def getNodes(self):
-        return self.network["nodes"]
+        return self.network.get("nodes")
 
     def getNode(self, nodeId):
-        return self.network["nodes"][str(nodeId)]
+        return self.network.get("nodes").get(str(nodeId))
 
     def getCitations(self):
-        return self.network["citations"]
+        return self.network.get("citations")
 
     def getCitation(self, citationId):
-        return self.network["citations"][str(citationId)]
+        return self.network.get("citations").get(str(citationId))
 
     def getSupports(self):
-        return self.network["supports"]
+        return self.network.get("supports")
 
     def getSupport(self, supportId):
-        return self.network["supports"][str(supportId)]
+        return self.network.get("supports").get(str(supportId))
+
+    def getTerm(self, termId):
+        termIdStr = str(termId)
+        if termIdStr in self.getBaseTerms():
+            return self.getBaseTerm(termIdStr)
+        elif termIdStr in self.getFunctionTerms():
+            return self.getFunctionTerm(termIdStr)
+        elif termIdStr in self.getReifiedEdgeTerms():
+            return self.getReifiedEdgeTerm(termIdStr)
+        else:
+            return None
 
     def getBaseTerms(self):
-        return self.network["baseTerms"]
+        return self.network.get("baseTerms")
 
     def getBaseTerm(self, baseTermId):
-        return self.network["baseTerms"][str(baseTermId)]
+        return self.network.get("baseTerms").get(str(baseTermId))
 
     def getFunctionTerms(self):
-        return self.network['functionTerms']
+        return self.network.get('functionTerms')
 
     def getFunctionTerm(self, functionTermId):
-        return self.network["functionTerms"][str(functionTermId)]
+        return self.network.get("functionTerms").get(str(functionTermId))
 
     def getReifiedEdgeTerms(self):
-        return self.network['reifiedEdgeTerms']
+        return self.network.get('reifiedEdgeTerms')
 
     def getReifiedEdgeTerm(self, reifiedEdgeTermId):
-        return self.network["reifiedEdgeTerms"][str(reifiedEdgeTermId)]
+        return self.network.get("reifiedEdgeTerms").get(str(reifiedEdgeTermId))
 
     def getNamespaces(self):
-        return self.network['namespaces']
+        return self.network.get('namespaces')
 
     def getNamespace(self, namespaceId):
-        return self.network["namespaces"][str(namespaceId)]
+        return self.network.get("namespaces").get(str(namespaceId))
 
     #----------------------------------------------------------
     # Basic Element Creation
     #----------------------------------------------------------
 
     def nextElementId(self):
+        return "0000"
 
     def createEdge(self, sourceId, predicateId, targetId, citationIds, supportIds, properties):
         elementId = self.nextElementId();
@@ -190,8 +209,19 @@ class BELNetwork:
          elementId = self.nextElementId();
 
     def createCitation(self, text, citationId):
+        elementId = self.nextElementId();
 
     def createSupport(self, text, citationId):
+        elementId = self.nextElementId();
+
+    #----------------------------------------------------------
+    # Element removal
+    #----------------------------------------------------------
+
+    def removeEdge(self, edgeId):
+        edges = self.getEdges()
+        if edgeId in edges:
+            del edges[edgeId]
 
     #----------------------------------------------------------
     # Copy operations
@@ -262,19 +292,19 @@ class BELNetwork:
                 return nodeId
         return False
 
-    def copyTerm(self, sourceNetwork, sourceTermId):
-
-    def copyFunctionTerm(self, sourceNetwork, sourceTermId):
-
-    def copyBaseTerm(self, sourceNetwork, sourceTermId):
-
-    def copyReifiedEdgeTerm(self, sourceNetwork, sourceTermId):
-
-    def copyCitation(self, sourceNetwork, sourceCitationId):
-
-    def copySupport(self, sourceNetwork, sourceSupportId):
-
-    def copyNamespace(self, sourceNetwork, sourceNamespaceId):
+    # def copyTerm(self, sourceNetwork, sourceTermId):
+    #
+    # def copyFunctionTerm(self, sourceNetwork, sourceTermId):
+    #
+    # def copyBaseTerm(self, sourceNetwork, sourceTermId):
+    #
+    # def copyReifiedEdgeTerm(self, sourceNetwork, sourceTermId):
+    #
+    # def copyCitation(self, sourceNetwork, sourceCitationId):
+    #
+    # def copySupport(self, sourceNetwork, sourceSupportId):
+    #
+    # def copyNamespace(self, sourceNetwork, sourceNamespaceId):
 
     #----------------------------------------------------------
     # Merge operations
@@ -311,59 +341,61 @@ class BELNetwork:
     #----------------------------------------------------------
 
     def getEdgeLabel(self, edge):
-        subjectLabel = "missing"
-        objectLabel = "missing"
-        predicateLabel = "missing"
-        subjectId = edge['subjectId']
-        objectId = edge['objectId']
-        if subjectId in self.nodeLabelMap:
-            subjectLabel = self.nodeLabelMap[subjectId]
-        if objectId in self.nodeLabelMap:
-            objectLabel = self.nodeLabelMap[objectId]
-        predicateId = edge['predicateId']
-        predicateLabel = stripBELPrefixes(self.getTermLabel(predicateId))
+        subjectId = edge.get('subjectId')
+        objectId = edge.get('objectId')
+
+        if subjectId :
+            subjectLabel = self.nodeLabelMap.get(subjectId, "missing node")
+        else:
+            subjectLabel = "(no subject)"
+
+        if objectId:
+            objectLabel = self.nodeLabelMap.get(objectId, "missing")
+        else:
+            objectLabel = "(no object)"
+
+        predicateId = edge.get('predicateId')
+        if predicateId:
+            predicateLabel = stripBELPrefixes(self.getTermLabel(predicateId))
+        else:
+            predicateLabel = "(no predicate)"
+
         label = "%s %s %s" % (subjectLabel, predicateLabel, objectLabel)
         return label
 
     def getNodeLabel(self, node):
-        if 'name' in node and node['name']:
-            return node['name']
+        label = node.get('name')
+        if label:
+            return label
 
         elif 'represents' in node:
-            return self.getTermLabel(node['represents'])
+            return self.getTermLabel(node.get('represents'))
 
         else:
-            return "node %s" % (node['id'])
-
-    def getTermById(self, termId):
-        termIdStr = str(termId)
-        if termIdStr in self.network['baseTerms']:
-            return self.network['baseTerms'][termIdStr]
-        elif termIdStr in self.network['functionTerms']:
-            return self.network['functionTerms'][termIdStr]
-        elif termIdStr in self.network['reifiedEdgeTerms']:
-            return self.network['reifiedEdgeTerms'][termIdStr]
-        else:
-            return None
+            return "node %s" % (node.get('id'))
 
     def getTermLabel(self, termId):
-        if termId in self.termLabelMap:
-            return self.termLabelMap[termId]
+        label = self.termLabelMap.get(termId)
+        if label:
+            return label
         else:
             label = "error"
-            term = self.getTermById(termId)
+            term = self.getTerm(termId)
             type = term['type'].lower()
             if type == "baseterm":
-                name = term['name']
-                if 'namespaceId' in term and term['namespaceId']:
-                    namespaceId = term['namespaceId']
-                    namespace = self.network['namespaces'][namespaceId]
+                name = term.get('name')
+                namespaceId = term.get('namespaceId')
+                if namespaceId:
+                    namespace = self.getNamespace(namespaceId)
 
                     if namespace:
-                        if namespace['prefix']:
-                            label = "%s:%s" % (namespace['prefix'], name)
-                        elif namespace['uri']:
-                            label = "%s%s" % (namespace['uri'], name)
+                        prefix = namespace.get('prefix')
+                        if prefix and prefix.upper() == "BEL":
+                            label = name
+                        elif prefix:
+                            label = "%s:%s" % (prefix, name)
+                        elif namespace.get('uri'):
+                            label = "%s%s" % (namespace.get('uri'), name)
                         else:
                             label = name
                     else:
@@ -372,20 +404,19 @@ class BELNetwork:
                     label = name
 
             elif type == "functionterm":
-                functionTermId = term['functionTermId']
+                functionTermId = term.get('functionTermId')
                 functionLabel = self.getTermLabel(functionTermId)
                 functionLabel = getFunctionAbbreviation(functionLabel)
                 parameterLabels = []
-                for parameterId in term['parameterIds']:
+                for parameterId in term.get('parameterIds'):
                     parameterLabel = self.getTermLabel(parameterId)
                     parameterLabels.append(parameterLabel)
                 label = "%s(%s)" % (functionLabel, ",".join(parameterLabels))
 
             elif type == "reifiededgeterm":
-                edgeId = term['edgeId']
-                edges = self.network['edges']
-                if edgeId in edges:
-                    reifiedEdge = edges[edgeId]
+                edgeId = term.get('edgeId')
+                reifiedEdge = self.getEdge(edgeId)
+                if reifiedEdge:
                     label = "(%s)" % (self.getEdgeLabel(reifiedEdge))
                 else:
                     label = "(reifiedEdge: %s)" % (edgeId)
@@ -408,10 +439,11 @@ class BELNetwork:
 
         # nodes
         for nodeId, node in self.getNodes().iteritems():
-
+            output.write("       %s\n" % self.getNodeLabel(node))
 
         # edges
         for edgeId, edge in self.getEdges().iteritems():
+            self.writeEdgeSummary(edge, output)
 
     def writeSummaryByCitation(self, fileName = None):
         if fileName:
@@ -436,12 +468,14 @@ class BELNetwork:
 
                 edgeList = self.supportToEdgeMap[supportId]
                 for edge in edgeList:
-                    # Write Edge
-                    output.write("       %s\n" % self.getEdgeLabel(edge))
-                    for pv in edge['properties']:
-                        output.write("                %s: %s\n" % (pv['predicateString'], pv['value']))
+                    self.writeEdgeSummary(edge, output)
+
 
         if fileName:
             output.close()
 
-
+    def writeEdgeSummary(self, edge, output):
+        # Write Edge
+        output.write("       %s\n" % self.getEdgeLabel(edge))
+        for pv in edge.get('properties'):
+            output.write("                %s: %s\n" % (pv.get('predicateString'), pv.get('value')))

@@ -4,7 +4,6 @@ import requests
 import pandas as pd
 import json
 from jsonschema import validate
-import ndexSchema as schema
 
         
 # Utility to strip UUID from property graph before writing, ensure that we create new network
@@ -162,7 +161,11 @@ class Ndex:
 #    network    POST    /network    Network    NetworkSummary
     def saveNewNetwork(self, Network):
         route = "/network/asNetwork"
-        return self.post(route, Network)
+        if isinstance(Network, dict):
+            postJson = json.dumps(Network)
+        else:
+            postJson = Network
+        return self.post(route, postJson)
 
 #    network    POST    /network/asNetwork/group/{group UUID}    Network    NetworkSummary
     def saveNewNetworkForGroup(self, Network, groupId):
@@ -175,7 +178,8 @@ class Ndex:
     def getNeighborhood(self, networkId, searchString, searchDepth=1):
         route = "/network/%s/asNetwork/query" % (networkId) 
         postData = {'searchString': searchString,
-                   'searchDepth': searchDepth}
+                   'searchDepth': searchDepth,
+                   'edgeLimit' : "10000"}
         postJson = json.dumps(postData)
         return self.post(route, postJson)
         
@@ -222,6 +226,3 @@ class Ndex:
 # Task methods
 
 # Validation
-
-    def validateNetwork(self, network):
-        return validate(network, schema.network)
